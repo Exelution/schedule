@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Календар графіка</title>
+<style>
+:root{--bg:#f4f7f6;--card:#fff;--text:#2c3e50;--p:#3498db;--s:#2ecc71;--d:#e74c3c;--a:#9b59b6;--b:#dcdde1}
+*{box-sizing:border-box;margin:0;padding:0;font-family:sans-serif}
+body{background:var(--bg);color:var(--text);padding:15px;font-size:14px}
+.container{max-width:1200px;margin:0 auto}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:10px;border-bottom:2px solid var(--b)}
+button{background:var(--p);color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer;font-weight:600}
+button:hover{background:#2980b9}
+.btn-success{background:var(--s)}.btn-success:hover{background:#27ae60}
+.btn-danger{background:var(--d)}.btn-danger:hover{background:#c0392b}
+.grid-layout{display:grid;grid-template-columns:1fr;gap:15px}
+@media(min-width:900px){.grid-layout{grid-template-columns:320px 1fr}}
+.card{background:var(--card);padding:15px;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.05);border:1px solid var(--b);margin-bottom:15px}
+.form-group{margin-bottom:10px}
+.form-group label{display:block;font-weight:600;margin-bottom:3px;font-size:12px}
+input,select{width:100%;padding:6px 10px;border:1px solid var(--b);border-radius:6px;font-size:13px}
+.cycle-days-list{max-height:160px;overflow-y:auto;border:1px solid var(--b);padding:8px;border-radius:6px;background:#fafafa;margin-bottom:10px}
+.cycle-day-item{display:grid;grid-template-columns:25px 55px 1fr 1fr;gap:4px;align-items:center;margin-bottom:5px}
+.calendar-nav{display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;background:var(--card);padding:10px;border-radius:8px;border:1px solid var(--b)}
+.days-grid{display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:15px}
+@media(min-width:600px){.days-grid{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}}
+.day-card{background:var(--card);border-radius:8px;border-left:5px solid var(--b);padding:10px;border:1px solid var(--b);border-left-width:5px}
+.day-card.work{border-left-color:var(--p)}
+.day-card.off{border-left-color:var(--b);background:#fafafa}
+.day-card.today{box-shadow:0 0 0 2px var(--a)}
+.day-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.day-date{font-weight:bold;font-size:15px}
+.day-name{font-size:11px;color:#7f8c8d;text-transform:uppercase}
+.day-body .inputs-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:5px}
+.day-body label{font-size:10px;color:#7f8c8d;margin-bottom:1px}
+.time-select-row{display:flex;align-items:center;gap:3px;margin-top:2px}
+.stats-table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
+.stats-table th,.stats-table td{border:1px solid var(--b);padding:8px;text-align:left}
+.stats-table th{background:#f8f9fa}
+.stats-table tr.total-row{font-weight:bold;background:#eaedd0}
+.modal{display:none;position:fixed;z-index:1000;left:0;top:0;width:100%;height:100%;background:rgba(0,0,0,0.5);align-items:center;justify-content:center}
+.modal-content{background:#fff;padding:15px;border-radius:8px;max-width:400px;width:90%}
+.report-box{width:100%;height:150px;font-family:monospace;padding:8px;border:1px solid var(--b);background:#f9f9f9;resize:none;margin-bottom:10px}
+</style>
+</head>
+<body>
+<div class="container">
+<header>
+<div><h2>Календар та Виробіток</h2></div>
+<div style="display:flex;gap:5px">
+<button onclick="exportData()" class="btn-success">📤 Експорт</button>
+<div style="position:relative;overflow:hidden;display:inline-block">
+<button class="btn-success">📥 Імпорт</button>
+<input type="file" id="importFile" accept=".json" onchange="importData(event)" style="position:absolute;left:0;top:0;opacity:0;cursor:pointer">
+</div>
+</div>
+</header>
+<div class="grid-layout">
+<aside class="card">
+<h3>🛠️ Шаблон циклу</h3>
+<div class="form-group"><label>Дата старту змін:</label><input type="date" id="cycleStartDate"></div>
+<div class="form-group"><label>Ціна циклу (грн):</label><input type="number" id="globalPriceCycle" value="50"></div>
+<div class="form-group"><label>Ціна лазера (грн):</label><input type="number" id="globalPriceLaser" value="100"></div>
+<div style="display:flex;justify-content:space-between;margin-bottom:5px">
+<label style="font-weight:bold">Дні:</label>
+<div><button onclick="addCycleDay()" style="padding:2px 5px;font-size:11px">+ День</button>
+<button onclick="removeLastCycleDay()" class="btn-danger" style="padding:2px 5px;font-size:11px">- Вид.</button></div>
+</div>
+<div class="cycle-days-list" id="cycleDaysContainer"></div>
+<button onclick="applyNewSchedule()" class="btn-success" style="width:100%">🔄 Застосувати новий графік</button>
+</aside>
+<main>
+<div class="calendar-nav">
+<button onclick="navigateWeek(-1)">◀ Назад</button>
+<h3 id="currentWeekTitle" style="flex-grow:1;text-align:center"></h3>
+<button onclick="openReportModal()" style="background:var(--a);margin-right:5px">📋 Звіт</button>
+<button onclick="navigateWeek(1)">Вперед ▶</button>
+</div>
+<div class="days-grid" id="daysGridContainer"></div>
+<div class="card">
+<h3>📊 ЗП за поточний тиждень</h3>
+<table class="stats-table">
+<thead><tr><th>Показник</th><th>Кількість</th><th>Тариф</th><th>Сума</th></tr></thead>
+<tbody id="statsTableBody"></tbody>
+</table>
+</div>
+</main>
+</div>
+<div class="card">
+<h3>📈 Окремий перегляд статистики (Тиждень / Місяць)</h3>
+<div style="margin:10px 0"><label>Оберіть місяць: </label><input type="month" id="statsMonthSelect" onchange="calculatePeriodStats()" style="width:auto;display:inline-block"></div>
+<table class="stats-table">
+<thead><tr><th>Період</th><th>Змін</th><th>Год. змін</th><th>Цикли</th><th>Лазер (год)</th><th>Заробіток</th></tr></thead>
+<tbody id="periodStatsTableBody"></tbody>
+</table>
+</div>
+</div>
+<div id="reportModal" class="modal">
+<div class="modal-content">
+<h4 style="margin-bottom:10px">Текстовий звіт (для копіювання)</h4>
+<textarea id="reportTextarea" class="report-box" readonly></textarea>
+<div style="display:flex;justify-content:flex-end;gap:5px">
+<button onclick="copyReportToClipboard()" class="btn-success">📋 Копіювати</button>
+<button onclick="closeReportModal()" class="btn-danger">Закрити</button>
+</div></div></div>
+<script>
+let db={},currentWeekStart=new Date();
+let cycleTemplate=[{type:'work',startH:6,endH:15},{type:'work',startH:15,endH:23},{type:'off',startH:0,endH:0}];
+function initWeekAnchor(){
+let d=new Date(),day=d.getDay(),diff=d.getDate()-day+(day==0?-6:1);
+currentWeekStart=new Date(d.setDate(diff));currentWeekStart.setHours(0,0,0,0);
+}
+function loadData(){
+let sDb=localStorage.getItem('w_db'),sTm=localStorage.getItem('w_tm');
+if(sDb)db=JSON.parse(sDb);if(sTm)cycleTemplate=JSON.parse(sTm);
+}
+function saveData(){
+localStorage.setItem('w_db',JSON.stringify(db));localStorage.setItem('w_tm',JSON.stringify(cycleTemplate));
+}
+function formatDateKey(d){
+return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function makeHoursOptions(selected){
+let h='';for(let i=0;i<24;i++)h+=`<option value="${i}" ${i===selected?'selected':''}>${i}:00</option>`;return h;
+}
+</script>
+<script>
+function renderConstructor(){
+let c=document.getElementById('cycleDaysContainer');c.innerHTML='';
+cycleTemplate.forEach((d,i)=>{
+let div=document.createElement('div');div.className='cycle-day-item';
+div.innerHTML=`<b>#${i+1}</b>
+<select onchange="updateTemplateDay(${i},'type',this.value)" style="padding:2px">
+<option value="work" ${d.type==='work'?'selected':''}>Роб</option>
+<option value="off" ${d.type==='off'?'selected':''}>Вих</option>
+</select>
+<select onchange="updateTemplateDay(${i},'startH',parseInt(this.value))" ${d.type==='off'?'disabled':''}>${makeHoursOptions(d.startH)}</select>
+<select onchange="updateTemplateDay(${i},'endH',parseInt(this.value))" ${d.type==='off'?'disabled':''}>${makeHoursOptions(d.endH)}</select>`;
+c.appendChild(div);
+});
+}
+function updateTemplateDay(i,f,v){
+cycleTemplate[i][f]=v;if(f==='type'&&v==='off'){cycleTemplate[i].startH=0;cycleTemplate[i].endH=0}
+if(f==='type'&&v==='work'){cycleTemplate[i].startH=6;cycleTemplate[i].endH=15}
+renderConstructor();saveData();
+}
+function addCycleDay(){cycleTemplate.push({type:'work',startH:6,endH:15});renderConstructor();saveData()}
+function removeLastCycleDay(){if(cycleTemplate.length>1){cycleTemplate.pop();renderConstructor();saveData()}}
+function applyNewSchedule(){
+let dIn=document.getElementById('cycleStartDate').value;if(!dIn){alert("Оберіть дату!");return}
+let p=new Date(dIn);p.setHours(0,0,0,0);
+for(let i=0;i<365;i++){
+let k=formatDateKey(p),idx=i%cycleTemplate.length,t=cycleTemplate[idx];
+if(!db[k])db[k]={};db[k].type=t.type;db[k].startH=t.startH;db[k].endH=t.endH;
+if(db[k].cycles===undefined)db[k].cycles=0;if(db[k].laserHours===undefined)db[k].laserHours=0;
+p.setDate(p.getDate()+1);
+}
+saveData();renderCalendarWeek();calculatePeriodStats();alert("Графік оновлено вперед!");
+}
+function navigateWeek(w){currentWeekStart.setDate(currentWeekStart.getDate()+(w*7));renderCalendarWeek()}
+function calcDiffHours(s,e){if(s===e)return 0;return e>s?(e-s):((24-s)+e)}
+function updateDayDirect(k,f,v){
+if(!db[k])db[k]={type:'off',startH:0,endH:0,cycles:0,laserHours:0};
+if(['cycles','laserHours','startH','endH'].includes(f))db[k][f]=parseFloat(v)||0;else db[k][f]=v;
+saveData();calculateAndRenderStats();calculatePeriodStats();
+}
+</script>
+<script>
+function renderCalendarWeek(){
+let g=document.getElementById('daysGridContainer');g.innerHTML='';
+let wE=new Date(currentWeekStart);wE.setDate(wE.getDate()+6);
+document.getElementById('currentWeekTitle').innerText=`${currentWeekStart.toLocaleDateString('uk-UA',{month:'2-digit',day:'2-digit'})} — ${wE.toLocaleDateString('uk-UA',{month:'2-digit',day:'2-digit'})}`;
+let names=['Понеділок','Вівторок','Середа','Четвер','П\'ятниця','Субота','Неділя'],today=formatDateKey(new Date()),p=new Date(currentWeekStart);
+for(let i=0;i<7;i++){
+let k=formatDateKey(p);if(!db[k])db[k]={type:'off',startH:0,endH:0,cycles:0,laserHours:0};
+let d=db[k],isT=(k===today)?'today':'',card=document.createElement('div');card.className=`day-card ${d.type} ${isT}`;
+card.innerHTML=`<div class="day-header"><div><div class="day-date">${p.getDate()}</div><div class="day-name">${names[i]}</div></div>
+<select class="day-badge" style="width:auto;padding:2px" onchange="this.closest('.day-card').className='day-card '+this.value+' ${isT}';updateDayDirect('${k}','type',this.value);toggleHoursSelect('${k}',this.value)">
+<option value="work" ${d.type==='work'?'selected':''}>Робота</option><option value="off" ${d.type==='off'?'selected':''}>Вихідний</option></select></div>
+<div class="day-body"><div class="form-group"><label>Години роботи:</label><div class="time-select-row">
+<select id="sh-${k}" onchange="updateDayDirect('${k}','startH',this.value)" ${d.type==='off'?'disabled':''}>${makeHoursOptions(d.startH)}</select><span>до</span>
+<select id="eh-${k}" onchange="updateDayDirect('${k}','endH',this.value)" ${d.type==='off'?'disabled':''}>${makeHoursOptions(d.endH)}</select></div></div>
+<div class="inputs-grid"><div><label>Цикли:</label><input type="number" value="${d.cycles||0}" oninput="updateDayDirect('${k}','cycles',this.value)"></div>
+<div><label>Лазер (год):</label><input type="number" step="0.1" value="${d.laserHours||0}" oninput="updateDayDirect('${k}','laserHours',this.value)"></div></div></div>`;
+g.appendChild(card);p.setDate(p.getDate()+1);
+}
+calculateAndRenderStats();
+}
+function toggleHoursSelect(k,t){
+let s=document.getElementById(`sh-${k}`),e=document.getElementById(`eh-${k}`);if(!s||!e)return;
+if(t==='off'){s.value=0;e.value=0;s.disabled=e.disabled=true;updateDayDirect(k,'startH',0);updateDayDirect(k,'endH',0)}
+else{s.disabled=e.disabled=false;s.value=6;e.value=15;updateDayDirect(k,'startH',6);updateDayDirect(k,'endH',15)}
+}
+function calculateAndRenderStats(){
+let tH=0,tC=0,tL=0,pc=parseFloat(document.getElementById('globalPriceCycle').value)||50,pl=parseFloat(document.getElementById('globalPriceLaser').value)||100,p=new Date(currentWeekStart);
+for(let i=0;i<7;i++){let k=formatDateKey(p);if(db[k]){let d=db[k];if(d.type==='work')tH+=calcDiffHours(d.startH,d.endH);tC+=(d.cycles||0);tL+=(d.laserHours||0)}p.setDate(p.getDate()+1)}
+let eC=tC*pc,eL=tL*pl;document.getElementById('statsTableBody').innerHTML=`<tr><td>Години змін</td><td>${tH} год</td><td>—</td><td>Зміна</td></tr><tr><td>Цикли</td><td>${tC} шт</td><td>${pc} грн</td><td>${eC.toFixed(2)} грн</td></tr><tr><td>Робота лазера</td><td>${tL.toFixed(1)} год</td><td>${pl} грн</td><td>${eL.toFixed(2)} грн</td></tr><tr class="total-row"><td>ЗА ТИЖДЕНЬ</td><td colspan="2" style="text-align:right">Заробіток:</td><td style="color:var(--s)">${(eC+eL).toFixed(2)} грн</td></tr>`;
+}
+function calculatePeriodStats(){
+let sM=document.getElementById('statsMonthSelect').value;if(!sM)return;
+let mW=0,mH=0,mC=0,mL=0,mE=0,wW=0,wH=0,wC=0,wL=0,wE=0,pc=parseFloat(document.getElementById('globalPriceCycle').value)||50,pl=parseFloat(document.getElementById('globalPriceLaser').value)||100,p=new Date(currentWeekStart);
+for(let i=0;i<7;i++){let k=formatDateKey(p);if(db[k]){let d=db[k];if(d.type==='work'){wW++;wH+=calcDiffHours(d.startH,d.endH)}wC+=(d.cycles||0);wL+=(d.laserHours||0)}p.setDate(p.getDate()+1)}
+wE=(wC*pc)+(wL*pl);Object.keys(db).forEach(k=>{if(k.startsWith(sM)){let d=db[k];if(d.type==='work'){mW++;mH+=calcDiffHours(d.startH,d.endH)}mC+=(d.cycles||0);mL+=(d.laserHours||0)}});
+mE=(mC*pc)+(mL*pl);let mNames=["Січень","Лютий","Березень","Квітень","Травень","Червень","Липень","Серпень","Вересень","Жовтень","Листопад","Грудень"],[y,m]=sM.split('-');
+document.getElementById('periodStatsTableBody').innerHTML=`<tr><td>Поточний тиждень</td><td>${wW} дн.</td><td>${wH} год</td><td>${wC} шт</td><td>${wL.toFixed(1)} год</td><td style="font-weight:bold;color:var(--p)">${wE.toFixed(2)} грн</td></tr><tr style="font-weight:bold;background:#f1f2f6;"><td>${mNames[parseInt(m)-1]} ${y}</td><td>${mW} дн.</td><td>${mH} год</td><td>${mC} шт</td><td>${mL.toFixed(1)} год</td><td style="color:var(--s)">${mE.toFixed(2)} грн</td></tr>`;
+}
+function openReportModal(){
+let wE=new Date(currentWeekStart);wE.setDate(wE.getDate()+6);
+let txt=`${currentWeekStart.toLocaleDateString('uk-UA',{day:'2-digit',month:'2-digit'})}-${wE.toLocaleDateString('uk-UA',{day:'2-digit',month:'2-digit'})}\n`,tC=0,tL=0,p=new Date(currentWeekStart),s=['пн','вт','ср','чт','пт','сб','нд'];
+
+for(let i=0;i<7;i++){
+    let k=formatDateKey(p);
+    let dayData=db[k]||{type:'off'};
+    
+    if(dayData.type==='off'){
+        txt+=`\n`; // Якщо вихідний — залишаємо рядок порожнім
+    }else{
+        let c=dayData.cycles||0;
+        let l=Math.round(dayData.laserHours||0); // Години лазера цілим числом
+        tC+=c; tL+=dayData.laserHours||0;
+        txt+=`${s[i]}. ${c} + ${l} год. лазера\n`;
+    }
+    p.setDate(p.getDate()+1);
+}
+
+txt+=`всього: цикли ${tC}, лазер ${Math.round(tL)} год.`;
+document.getElementById('reportTextarea').value=txt;
+document.getElementById('reportModal').style.display='flex';
+}
+function closeReportModal(){document.getElementById('reportModal').style.display='none'}
+function copyReportToClipboard(){let t=document.getElementById('reportTextarea');t.select();navigator.clipboard.writeText(t.value).then(()=>{alert("Скопійовано!");closeReportModal()})}
+function exportData(){
+try{let blob=new Blob([JSON.stringify({db,cycleTemplate})],{type:"application/json"});let url=URL.createObjectURL(blob);let a=document.createElement('a');a.href=url;a.download=`backup_${formatDateKey(new Date())}.json`;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url)}catch(e){alert("Помилка експорту!")}
+}
+function importData(e){
+let f=e.target.files;if(!f||!f[0])return;let r=new FileReader();
+r.onload=function(ev){try{let p=JSON.parse(ev.target.result);if(p.db&&p.cycleTemplate){db=p.db;cycleTemplate=p.cycleTemplate;saveData();renderConstructor();renderCalendarWeek();calculatePeriodStats();alert("Імпортовано успішно!")}}catch(err){alert("Помилка структури JSON!")}document.getElementById('importFile').value=""};
+r.readAsText(f[0]);
+}
+document.addEventListener("DOMContentLoaded",function(){
+let now=new Date();document.getElementById('cycleStartDate').value=formatDateKey(now);
+document.getElementById('statsMonthSelect').value=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+initWeekAnchor();loadData();renderConstructor();renderCalendarWeek();calculatePeriodStats();
+});
+</script>
+</body>
+</html>
